@@ -276,8 +276,9 @@ signal ID : std_logic_vector (8 downto 1);
 signal W_IO : STD_LOGIC;
 signal RRSEL : STD_LOGIC;
 
---signal caintern  : STD_LOGIC;
---signal ncbintern : STD_LOGIC;
+signal caintern  : STD_LOGIC;
+signal ncbintern : STD_LOGIC;
+signal testsig0 : STD_LOGIC;
 
 --uart sigs
 -- constant c_CLKS_PER_BIT : integer := 2604;  --19200 bauds
@@ -1123,6 +1124,25 @@ begin
 	 end process;
 	
 
+    -- test signals generation
+	 process (SYSCLK)
+		 variable local_last_AB0 : STD_LOGIC := '0';
+		 variable nshift20ns     : integer range 0 to 511 := 0;
+	 begin
+      if rising_edge(SYSCLK) then
+			if local_last_AB0 /= nAB(1) and nAB(1) = '1' then
+				nshift20ns := 0;
+			end if;
+			if nshift20ns > 20 then
+				   testsig0 <= nAB(1);
+			else
+				nshift20ns := nshift20ns+1;
+			end if;
+			local_last_AB0 := nAB(1);
+		end if;
+	 end process;
+	
+
 	
 	GEN_IO: 
 		for I in 0 to 7 generate
@@ -1172,6 +1192,7 @@ begin
 --	 CFRAMCE : A17INTERNRAMCE PORT MAP (SYSCLK, RAMCE_nRW, RAM_Addr_Latch, RAM_DIN, RAMCE_DOUT);
 
 --    GENAB : mak_ckab     PORT MAP (caintern, ncbintern, CK3MHZ, '1');
+    GENAB : mak_ckab     PORT MAP (caintern, ncbintern, CLK_DIV0(4), '1');
 --	 PHIGN : clkgen       port map (hiclk=>SYSCLK, c_a=> not CKA, nc_b=> not nCKB, 
 	 PHIGN : clkgen       port map (hiclk=>SYSCLK, c_a=> not CKA, nc_b=> not nCKB, 
 	                                nrst=>'1', pps4_ph=>pps4_phi, diagclk=>diagAnB); 
@@ -1232,7 +1253,25 @@ begin
 	  
 --	 nDO <= (others=>'1'); --to be replace by nDO_int when it's working 
 --	 nDO <= (others=>CLK_DIV0(7)); --to be replace by nDO_int when it's working 
-	 nDO <= not nDO_int;  
+
+
+-- standard line neutralized for tests
+ nDO <= not nDO_int;  
+
+--   nDO(1) <= caintern;
+--   nDO(2) <= ncbintern;
+--   nDO(3) <= testsig0;
+--   nDO(4) <= CLK_DIV0(4);
+--	
+--	nDO(5) <= caintern;
+--   nDO(6) <= ncbintern;
+--   nDO(7) <= testsig0;
+--   nDO(8) <= not testsig0;
+--
+
+
+
+
 --	 TESTLED <= '0' when pps4_phi = phi3A else '1'; 
 --	 TESTLED <= not is_IODevice_On; 
 --	 TESTLED <= is_IODevice_On; 
