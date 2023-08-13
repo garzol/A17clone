@@ -110,7 +110,7 @@ begin
 	
 	process(hiclk)
 		variable v_diagcycle : natural range 0 to 5000000 := 0;
-		variable v_count : natural range 0 to 5 := 0;
+		variable v_count : natural range 0 to 7 := 0;
 	begin
 		if rising_edge(hiclk) then
 			last_pps4 <= pps4_t0;

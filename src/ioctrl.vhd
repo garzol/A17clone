@@ -91,7 +91,9 @@ entity ioctrl is
 			  -- OUT_OPT1 : out STD_LOGIC; -- added HW V3.
 			  OUT_OPT2 : out STD_LOGIC; -- added HW V3.
 			  TXp : out STD_LOGIC; -- added HW V3 09/2022. Opt1_33  =fpga pin34 (IO_L05N_2).
-			  RXp : in STD_LOGIC  -- added HW V3 03/2023. Optin4_33  =fpga pin39 (IP_2/VREF_2).
+			  RXp : in STD_LOGIC;  -- added HW V3 03/2023. Optin4_33  =fpga pin39 (IP_2/VREF_2).
+              SCL : inout  STD_LOGIC;
+              SDA : inout  STD_LOGIC
 			  );
 			   
 end ioctrl;
@@ -174,18 +176,37 @@ component uart_tx is
 	);
 end component uart_tx;
 
-component seta17io is
-	port (
-    i_Clk             : in  std_logic;
-    i_SET_DV          : in  std_logic;
-    o_TIO_ENABLE_SIG  : out std_logic; -- '0'->fpga io as output
-	 o_IOLatchSig      : out std_logic_vector (1 downto 0); --'11' ensure output latches latched 
-	 -- o_IOSelSig        : out std_logic_vector (1 downto 0); --'11' ensure input latches in HIZ 
-	 -- o_SELIODir        : out std_logic; -- command of the general gate MOSFET 0->powered (ie output)
-    o_IIO_VEC         : out std_logic_vector(7 downto 0); 
-	 i16_Val           : in  std_logic_vector(15 downto 0) 
-	);
-end component seta17io;
+component EEPROMController is
+	  Port ( 
+		  parallel_in : in  STD_LOGIC_VECTOR(7 downto 0);
+		  register_adress : in STD_LOGIC_VECTOR(7 downto 0);		-- Register address inside EEPROM
+		  eeprom_adress : in STD_LOGIC_VECTOR(6 downto 0);			-- I2C Address of EEPROM
+		  start : in  STD_LOGIC;											-- Rising edge sensitive
+		  reset : in STD_LOGIC;												-- Reset for I2C Master
+		  clk : in STD_LOGIC;
+		  parallel_out : out STD_LOGIC_VECTOR(7 downto 0);
+		  err : out STD_LOGIC;
+		  busy : out STD_LOGIC;
+		  sda : inout  STD_LOGIC;
+		  scl : inout  STD_LOGIC;
+		  operation : in STD_LOGIC_VECTOR(1 downto 0) -- Operation select
+		  );				
+end component EEPROMController;
+
+
+-- signals for iic management
+signal busy_iic : STD_LOGIC :='0';
+signal error_iic : STD_LOGIC :='0';
+signal start_iic : STD_LOGIC :='0';
+signal data_iic_out : std_logic_vector (7 downto 0);
+signal data_iic_in  : std_logic_vector (7 downto 0);
+signal addr_iic     : std_logic_vector (7 downto 0);
+signal operation_iic: std_logic_vector (1 downto 0) :="00";
+--now we need memory to save NVRAM...
+type   t_nvram is array(0 to 127) of std_logic_vector(7 downto 0);
+signal NVRAM_data : t_nvram;
+signal last_busy_iic: std_logic := '0';
+
 
 signal CLK_DIV0 : unsigned (26 downto 0):=(others=>'0');
 --signal last_clk22 : STD_LOGIC :='0';
@@ -340,8 +361,9 @@ signal     diagIDRAM : STD_LOGIC_VECTOR(4 DOWNTO 1) := (others => '0');
 --signal msglength : integer range 0 to 33 := 33;
 -- constant Acc_msg   : String(1 to 44) := "A17 Clone V1.3"&CR&LF&"2023-02-20"&CR&LF&"rev 2"&CR&LF&"A1752CF"&CR&LF;
 -- constant Acc_msg : std_logic_vector(0 to 71) := X"41"&X"42"&X"43"&X"44"&X"45"&X"46"&X"47"&X"13"&X"0A";
-signal mystdmsg  : std_logic_vector(1 to 35*8) := (others=>'1');
---constant idstring: std_logic_vector(1 to 13*8) := X"56"&  --1er
+signal mystdmsg  : std_logic_vector(1 to 54*8) := (others=>'1');
+
+-- constant idstring: std_logic_vector(1 to 13*8) := X"56"&  --1er
 --                                                  X"41"&
 --                                                  X"31"&
 --																  X"37"&
@@ -415,7 +437,8 @@ begin
     end process;
 	 	 
 	 process (SYSCLK)
-	    variable pipovar : integer range 0 to 255 := 0;
+	     variable first_time : boolean := true;
+	     variable pipovar : integer range 0 to 255 := 0;
 		 variable IOLatchTime : integer range 0 to 8 := 0;
 		 variable IOrdTime : integer range 0 to 8 := 0;
 		 variable enlargesigbadram : integer range 0 to 1023 := 0;
@@ -471,7 +494,10 @@ begin
 			end if;
 
 
-
+            if first_time = true then
+				SELIODir <= '1';	--allio are input at reset. 1 is input, 0 is output            
+                first_time := false;
+            end if;
 			
 			if SPO = '1' then --SPO is maintained by master device to -12V for 100ms min
 				--do reset things
@@ -1054,6 +1080,12 @@ begin
 					mystdmsg(8*27+1 to 8*33) <= X"53"&r_BitSwitches(0)&r_BitSwitches(1)&r_BitSwitches(2)&r_BitSwitches(3)&r_BitSwitches(4);
 					-- V for version
 					mystdmsg(8*33+1 to 8*35) <= X"56"&X"55";
+					-- I for iic eprom
+					mystdmsg(8*35+1 to 8*36) <= X"49";
+					mystdmsg(8*36+1 to 8*37) <= "0011000"&error_iic;
+					for K in 0 to 7 loop
+						mystdmsg(8*37+1+8*K to 8*37+8*(K+1)) <= NVRAM_DATA(K);
+					end loop;
 					
 				-- end if;
 				-- start_rx <= '1';
@@ -1062,7 +1094,7 @@ begin
 				if FIFOWR = '1' then
 					FIFOWR <= '0';
 				else
-					if byt_num < 35 then
+					if byt_num < 45 then
 						FIFOWR <= '1';
 						FIFO_DIN <= mystdmsg(1+byt_num*8 to (byt_num+1)*8);
 						byt_num := byt_num+1;	
@@ -1124,12 +1156,13 @@ begin
 	 end process;
 	
 
-    -- test signals generation
+
+    -- test iic read
 	 process (SYSCLK)
 		 variable local_last_AB0 : STD_LOGIC := '0';
 		 variable nshift20ns     : integer range 0 to 511 := 0;
 	 begin
-      if rising_edge(SYSCLK) then
+	   if rising_edge(SYSCLK) then
 			if local_last_AB0 /= nAB(1) and nAB(1) = '1' then
 				nshift20ns := 0;
 			end if;
@@ -1141,8 +1174,81 @@ begin
 			local_last_AB0 := nAB(1);
 		end if;
 	 end process;
-	
 
+
+    -- test read_iic_eprom
+	 process (SYSCLK)
+		 variable stop_reading : boolean := true;
+		 variable stop_writing : boolean := false;
+		 variable substate     : integer range 0 to 31 := 0;
+		 variable offs         : natural range 0 to 31 := 6;
+         constant C_STRING     : string   := "AA55 Consulting group zobi";
+         constant C_OFFSET     : integer range 0 to 31 := 5;
+         variable sleepers     : natural range 0 to 1000000 := 0;
+         variable busy_falling_edge : boolean := false;
+	 begin
+	   if rising_edge(SYSCLK) then
+	       if busy_iic = '0' then
+	           if last_busy_iic = '1' then
+	               busy_falling_edge := true;
+	           else
+	               busy_falling_edge := false;
+	           end if;
+	           last_busy_iic <= '0';
+	       else
+	           busy_falling_edge := false;
+	           last_busy_iic <= '1';
+	       end if;
+	               
+	       if busy_iic = '0' then
+	           if start_iic = '0' and busy_falling_edge = false then
+                   if sleepers = 100000 then
+                       sleepers := 0;
+                       if stop_reading = false then
+                           operation_iic <= "01";  --random read
+                           addr_iic <= std_logic_vector(to_unsigned(substate, addr_iic'length));
+                           start_iic <= '1';
+                           if substate > 15 then
+                               stop_reading := true;
+                               stop_writing := false;
+                               substate := 0;
+                           else
+                               substate := substate+1;                           
+                           end if;
+                       elsif stop_writing = false then
+                           addr_iic <= std_logic_vector(to_unsigned(16#5A#, addr_iic'length));
+                           operation_iic <= "10";  --byte write
+                           --data_iic_in <= std_logic_vector(to_unsigned(65+substate, data_iic_in'length));
+                           data_iic_in <= std_logic_vector(to_unsigned(16#C3#, data_iic_in'length));
+                           start_iic <= '1';
+                           if substate > 15 then
+                               stop_reading := true;
+                               stop_writing := false;
+                               substate := 0;
+                           else
+                               substate := substate+1;
+                           end if;
+                                   
+                       end if; -- end if reading phase
+                   else
+                       sleepers := sleepers+1;
+                   end if;
+               else -- case start_iic = '1'
+                   null;
+                   start_iic <= '0'; 
+               end if; -- end if start_iic = 0
+               if busy_falling_edge = true then
+                   start_iic <= '0'; 
+                   if stop_reading = false and substate > 0 then
+                       NVRAM_data(substate-1) <= data_iic_out;                       
+                       --NVRAM_data(substate-1) <= std_logic_vector(to_unsigned(64+substate, data_iic_in'length));                       
+                   end if;
+               end if;
+                  
+	       end if;  -- end if busy_iic=0
+		end if; -- end if rising_edge sysclock
+	 end process;
+	
 	
 	GEN_IO: 
 		for I in 0 to 7 generate
@@ -1188,16 +1294,42 @@ begin
 										    empty => ISFIFOVOID
 									       );
   
+  
+  NVRAM_IIC : component EEPROMController Port Map ( 
+		  parallel_in => data_iic_in,
+		  register_adress => addr_iic,-- Register address inside EEPROM
+		  eeprom_adress => "1010000",	-- I2C Address of EEPROM (last 0 is page num)
+		  start  => start_iic,				-- Rising edge sensitive
+		  reset  => '0',				-- Reset for I2C Master
+		  clk  => SYSCLK,
+		  parallel_out  => data_iic_out,
+		  err  => error_iic,
+		  busy   => busy_iic,
+		  sda => SDA,
+		  scl => SCL,
+		  operation => operation_iic              -- Operation select
+		  );				
+
+
+  
+  
+  
 --	 CFROMCE : A17INTERNROMCE PORT MAP (SYSCLK, ROM_Addr_Latch, ROMCE_DOUT);
 --	 CFRAMCE : A17INTERNRAMCE PORT MAP (SYSCLK, RAMCE_nRW, RAM_Addr_Latch, RAM_DIN, RAMCE_DOUT);
 
 --    GENAB : mak_ckab     PORT MAP (caintern, ncbintern, CK3MHZ, '1');
-    GENAB : mak_ckab     PORT MAP (caintern, ncbintern, CLK_DIV0(4), '1');
+      GENAB : mak_ckab     PORT MAP (caintern, ncbintern, CLK_DIV0(4), '1');
 --	 PHIGN : clkgen       port map (hiclk=>SYSCLK, c_a=> not CKA, nc_b=> not nCKB, 
-	 PHIGN : clkgen       port map (hiclk=>SYSCLK, c_a=> not CKA, nc_b=> not nCKB, 
-	                                nrst=>'1', pps4_ph=>pps4_phi, diagclk=>diagAnB); 
+--      PHIGN : clkgen       port map (hiclk=>SYSCLK, c_a=>not caintern, nc_b=> ncbintern, nrst=>'1', pps4_ph=>pps4_phi, diagclk=>diagAnB); 
 
 
+      PHIGN : clkgen       port map (hiclk=>SYSCLK, c_a=>not CKA, nc_b=>not nCKB, nrst=>'1', pps4_ph=>pps4_phi, diagclk=>diagAnB); 
+
+
+--    PHIGN : clkgen       port map (SYSCLK, not CKA, not nCKB, '1', pps4_phi, diagAnB); 
+
+-- CKA<=caintern;
+--nCKB<=ncbintern;
 
   -- Instantiate UART transmitter
   UART_TX_INST : uart_tx
