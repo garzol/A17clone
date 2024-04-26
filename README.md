@@ -3,7 +3,7 @@ vhdl files for making an A17xx clone either for spartan-3 or spartan-7
 
 main branch is for spartan 7
 
-## A1761plus  
+## A1761plus  (spartan 7 vhdl-2008 code)  
 In this directory: all sources of the A1761 clone for recel sys 3.  
 With soft HM6508 integrated=>one can choose between real, or SW NVRAM  
 
