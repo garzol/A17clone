@@ -36,6 +36,7 @@ package liberr is
 constant cnoErr         : std_logic_vector(7 downto 0) := X"00";
 constant cSysClkSyncErr : std_logic_vector(7 downto 0) := X"01";
 constant cResetErr      : std_logic_vector(7 downto 0) := X"02";
+constant cGPKDErr       : std_logic_vector(7 downto 0) := X"04";
 end liberr;
 
 package body liberr is

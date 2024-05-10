@@ -9,7 +9,7 @@
 -- Target Devices: 
 -- Tool Versions: 
 -- Description: 
--- 
+--  
 -- Dependencies: 
 -- 
 -- Revision:
@@ -57,7 +57,7 @@ end pps4TR;
 
 architecture Behavioral of pps4TR is
 
-constant c_trfifo_length : integer := 8;      --256 slots
+constant c_trfifo_length : integer := 10;      --8=256 slots 10=1024
 
 COMPONENT TRFIFO
   PORT (
@@ -238,9 +238,13 @@ signal RDB_data_st      :  t_sreg;
 signal dspl_A_off_st    :  std_logic;
 signal dspl_B_off_st    :  std_logic;
 
+--for switch matrix
+signal DOA_last         :  std_logic_vector(4 downto 1) := "1111";
+
 
 --for user command of configuration
-signal hm_user_sel_int  : std_logic := '0'; --default is: use intern hm
+--signal hm_user_sel_int  : std_logic := '0'; --default is: use intern hm
+signal hm_user_sel_int  : std_logic := '1'; --default is: use real HM6508
 
 --next 2 lines to avoid pointless warnings about black boxes (advice from https://www.xilinx.com/support/answers/9838.html)
 attribute box_type : string; 
@@ -304,6 +308,20 @@ begin
                         RIO_Latch      <= wio;
                         RESET_Latch    <= spo;
                         RRSEL_RAM_Latch<= rrsel;
+--                        if din = X"1D" then                  --DOA
+--                            case ROM_Addr_Latch is
+--                                when X"7EF"  =>   --self test 'A'
+--                                    DOA_last <= "1010";
+--                                when X"00E"  =>   --strobe 9..0, can be read from BL
+--                                    DOA_last <= ab(4 downto 1);
+--                                when others  =>   --should never get there
+--                                    DOA_last <= "1110"; --arbitrary convention
+--                            end case;
+                            
+--                        end if;
+--                        if din = X"27" then                  --DIA 
+                            
+                        
                         if din = X"1C" then                  --this is an IOL
                             case ROM_Addr_Latch is
 --                                when X"6CC" | X"6CE" | X"6D1" | 

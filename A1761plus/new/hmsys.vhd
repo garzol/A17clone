@@ -77,12 +77,14 @@ attribute box_type of HM6508    : component is "black_box";
 
 begin
 
+--dout      <= not DOUTA_INT(0); --allows to get 500, but well... (hminitram installed)
+--dout      <= DOUTA_INT(0);   --gives 508 (?)    (hminitram installed)
 WENABL(0) <=   not wEn;
 
 --that is not satisfying because we don't take into account the delay 
 --between enalbe and write enable during which dout is still Hi-Z
 --while here it will output data during the time chip is enable but not yet /WE
---but that is enough to get it work, then...
+--but that me enough to get it work, then...
 dout      <= DOUTA_INT(0) when wEn='1' and  nEn='0' else
              'Z';
           
@@ -99,7 +101,7 @@ MYRAMCMOS : HM6508
     ena    => not nEn, --nEn is active low
     wea    => WENABL,
     addra  => HMADDR,
-    dina   => (0 => not din), --/!\ not: because the ttl value is (not F/F state) of IO01
+    dina   => (0 => not din), --not: because the ttl value is (not F/F state) of IO01
     --dina   => (0 => din),
     douta  => DOUTA_INT
   );

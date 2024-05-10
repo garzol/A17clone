@@ -16,6 +16,8 @@
 -- Revision 0.01 - File Created
 -- Additional Comments:
 -- 
+-- Changelog:
+-- 2024-05-09: added soft sound generator
 ----------------------------------------------------------------------------------
 
 
@@ -63,6 +65,11 @@ entity rriotctrl is
 			  SetDDirH : out STD_LOGIC; -- added HW V3B. To set ID bus 5..8 in Hi-Z. 1=>HiZ, O=>Active (ball J2)
 			  -- OUT_OPT1 : out STD_LOGIC; -- added HW V3.
 			  OUT_OPT2 : out STD_LOGIC; -- added HW V3.
+           
+           --included in map 2024-05-09 for sound control    
+           --pin D1 of S7 fpga
+		   OPTIN3_33 : out STD_LOGIC; -- added HW V3.
+		   
 			  TXp : out STD_LOGIC; -- added HW V3 09/2022. Opt1_33  =fpga pin34 (IO_L05N_2).
 			  RXp : in STD_LOGIC;  -- added HW V3 03/2023. Optin4_33  =fpga pin39 (IP_2/VREF_2).
               SCL : inout  STD_LOGIC;
@@ -175,6 +182,36 @@ component hmsys
           );
 end component hmsys;
 
+
+component gpio11696 is
+    Port ( 
+           hiclk         : in     STD_LOGIC;
+           spo           : in     STD_LOGIC;
+           pps4_phi      : in     pps4_ph_type;
+           sc1           : in     STD_LOGIC;
+           sc2           : in     STD_LOGIC;
+           sc3           : in     STD_LOGIC;
+           sc4           : in     STD_LOGIC;
+           inx           : in     STD_LOGIC_VECTOR (24 downto 1);
+           outx          : out    STD_LOGIC_VECTOR (24 downto 1);
+
+           status        : out    std_logic_vector (7 downto 0);
+           
+           id : in STD_LOGIC_VECTOR (8 downto 1);
+           wio: in STD_LOGIC;
+           do : out STD_LOGIC_VECTOR (8 downto 1);
+           dldir : out STD_LOGIC);                --set dir of ID1..4 
+           
+end component gpio11696;
+
+component gentones is
+    Port (
+           hiclk       : in        STD_LOGIC;
+           tonesel     : in        std_logic_vector(4 downto 0);
+           soundout    : out       std_logic
+          );
+
+end component gentones;
 --COMPONENT TXFIFO
 --  PORT (
 --    clk : IN STD_LOGIC;
@@ -267,6 +304,15 @@ signal ISFIFOFULL : STD_LOGIC;
 signal ISFIFOVOID : STD_LOGIC;
 signal FIFORD : STD_LOGIC := '0';
 signal FIFOWR : STD_LOGIC := '0';
+
+
+--signals for GPIO11696 read state emulation
+--just for the tone generator here. Many things are missing, then. 
+signal outx_11696          : std_logic_vector(24 downto 1); -- := (others => '1');
+signal gpio11696_status    : std_logic_vector(7 downto 0);
+alias  outx_11696_grpC     : STD_LOGIC_VECTOR(4 DOWNTO 1) is outx_11696(12 DOWNTO 9);
+alias  outx_11696_grpD     : STD_LOGIC_VECTOR(4 DOWNTO 1) is outx_11696(16 DOWNTO 13);
+signal tonesel             : std_logic_vector(4 downto 0);
 
 
 --next 2 lines to avoid pointless warnings about black boxes (advice from https://www.xilinx.com/support/answers/9838.html)
@@ -437,8 +483,37 @@ begin
                     outx        =>  OutX_int,
                     wio         =>  nW_IO);
 
-
-
+    --make the tonesel vector from the GPIO11696 appropriate outputs
+    --tonesel is vector(4 downto 0) : 0 for 10 points, 4 for 100k points
+    tonesel <=     (outx_11696_grpC(4),
+                    outx_11696_grpD(1),outx_11696_grpD(2),
+                    outx_11696_grpD(3),outx_11696_grpD(4));
+               
+    CHIMES :        gentones
+    Port map (
+           hiclk         => SYSCLK,
+           tonesel       => tonesel,
+           soundout      => OPTIN3_33
+           );
+    --We currently use a simplified version of GPIO11696
+    --Not very tested. Only required for tone generation.       
+    GPIO11696SPY :  gpio11696
+    Port map ( 
+           hiclk         => SYSCLK,
+           spo           => SPO,
+           pps4_phi      => pps4_phi,
+           sc1           => '1',             --code of 11696 is D on recel sys3
+           sc2           => '0',
+           sc3           => '1',
+           sc4           => '1',
+           inx           => (others => '1'), --not used here, we just read 11696 state
+           outx          => outx_11696,
+           status        => gpio11696_status,           
+           id            => nID,
+           wio           => nW_IO,
+           do            => open,            --we are in read only mode
+           dldir         => open);           --we are in read only mode 
+           
                                       
 -- reset iic then write values to fram for testing                                     
 process_iic:    process(SYSCLK)
