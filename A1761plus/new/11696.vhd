@@ -146,6 +146,8 @@ process_cmd:    process(hiclk)
                                 case IOCmd_11696 is
                                     when "0000"   =>
                                         --set group A
+                                        --it is (not ID), because we reaa directly from data bus
+                                        --And IOL commands put /A on data bus
                                         out_grpA <= not ID(8 downto 5);
                                         --return old values:
                                         --no need here, because we are just reading
@@ -188,6 +190,8 @@ process_cmd:    process(hiclk)
                                         --we just want to chineese copy its state
                                     when "0110"   =>
                                         --(6) This is the bit set command
+                                        --it is (not ID), because we reaa directly from data bus
+                                        --And IOL commands put /A on data bus
                                         case  not ID(8 downto 5) is
                                             when "1111"   =>
                                                 --GRP A bit #0

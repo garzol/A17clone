@@ -16,6 +16,9 @@
 -- Revision 0.01 - File Created
 -- Additional Comments:
 -- 
+-- Changelog:
+-- 2024-05-09: created soft sound generator
+-- 2024-05-18: bug fix. double the freq for sound
 ----------------------------------------------------------------------------------
 
 
@@ -42,7 +45,10 @@ end gentones;
 architecture Behavioral of gentones is
 
 signal   tone_clk        : unsigned(4 downto 0) := (others => '0');
-constant c_basetonehi    : integer:=8928; --is 5600Hz for 20ns ticks
+constant c_basetonehi    : integer:=4464; --is 5600Hz*2 for 20ns ticks
+-- constant c_basetonehi    : integer:=8928; --is 5600Hz for 20ns ticks
+-- don't forget the *2, since we take bit 0 of counter for s10p (the highest tone)
+-- Hence the freq. of this bit is /2 with regard with base clock at 5600
 
 signal   s10p            : std_logic;
 signal   s100p           : std_logic;
